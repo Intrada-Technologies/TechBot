@@ -1,0 +1,17 @@
+{
+  "name": "TechBot",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/Intrada-Technologies/TechBot.git",
+  "author": "Adam Post <adamrpostjr@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "dependencies": {
+    "@matrix-org/olm": "^3.2.14",
+    "matrix-js-sdk": "^24.0.0"
+  },
+  "scripts": {
+    "start": "node --experimental-json-modules index.js"
+  },
+  "type": "module"
+}
