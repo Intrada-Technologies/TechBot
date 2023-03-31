@@ -23,7 +23,8 @@ class MatrixChatBot {
         this.enableEncryptionInAllJoinedRooms();
       }
     });
-
+    
+    // this might not be working .. 
     this.client.on('Room.timeline', async (event, room, toStartOfTimeline) => {
       if (toStartOfTimeline) return;
         console.log(event)
@@ -80,6 +81,7 @@ class MatrixChatBot {
     });
   }
 
+  // This is working fine
   async joinRoom(roomId) {
     try {
       await this.client.joinRoom(roomId);
@@ -89,11 +91,14 @@ class MatrixChatBot {
     }
   }
 
+  // This is working fine
   async login() {
     const response = await this.client.loginWithPassword(config.username, config.password);
     this.client.setAccessToken(response.access_token);
   }
 
+
+  // this might not be working .. 
   async enableEncryptionInAllJoinedRooms() {
     const rooms = this.client.getRooms();
     for (const room of rooms) {
@@ -112,6 +117,7 @@ class MatrixChatBot {
     }
   }
 
+  // This is working fine
   async handleMessage(room, message) {
     // const response = `Hello! You said: ${message}`;
     // await this.client.sendTextMessage(room.roomId, response);
