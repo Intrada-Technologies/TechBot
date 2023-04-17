@@ -1,127 +1,134 @@
-import sdk from 'matrix-js-sdk';
+import sdk from 'matrix-bot-sdk';
 import config from './_config.json' assert { type: 'json' };
-import olm from '@matrix-org/olm';
+import fetch from 'node-fetch';
 
-global.Olm = olm;
+// sleep function
+const sleep = (milliseconds) => {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+};
 
 class MatrixChatBot {
   constructor() {
-    this.client = sdk.createClient({
-      baseUrl: config.homeserverUrl,
-      userId: `@${config.username}:${config.userurl}`,
-      deviceId: config.deviceId,
-    });
+    this.auth = new sdk.MatrixAuth(config.homeserverUrl);
+    this.client = null;
+    this.storage = new sdk.SimpleFsStorageProvider('intrada-bot-store.json');
+    this.cryptoProvider = new sdk.RustSdkCryptoStorageProvider('./crypto');
   }
 
   async start() {
     await this.login();
-    await this.client.initCrypto();
-    await this.client.startClient();
+    await this.initalizeClient();
 
-    this.client.on('sync', (state) => {
-      if (state === 'PREPARED') {
-        this.enableEncryptionInAllJoinedRooms();
-      }
-    });
-    
-    // this might not be working .. 
-    this.client.on('Room.timeline', async (event, room, toStartOfTimeline) => {
-      if (toStartOfTimeline) return;
-        console.log(event)
-      const eventType = event.getType();
-      const sender = event.getSender();
-      if (eventType !== 'm.room.message' && eventType !== 'm.room.encrypted') return;
-      if (sender === this.client.getUserId()) return;
+    this.client.on('room.message', async (roomId, event) => {
+      if (event['content']?.['msgtype'] !== 'm.text') return;
+      if (event['sender'] === (await this.client.getUserId())) return;
 
-      if (eventType === 'm.room.encrypted') {
-        const content = event.getWireContent();
-        const senderKey = content.sender_key;
-        const sessionId = content.session_id;
+      console.log(`[M] Message received in room ${roomId} from ${event['sender']}: ${event['content']['body']}`);
+      console.log('[+] Sending Read Receipt');
+      await this.client.sendReadReceipt(roomId, event['event_id']);
 
-        const devices = this.client.getStoredDevicesForUser(sender);
-        if (!devices) {
-          console.warn('Cannot request room key: devices not found');
+      // sending typeing notification
+
+      // sending a message
+
+      let body = event['content']['body'];
+
+      if (body === '!oncall') {
+        console.log('[+] Sending Typing Notification');
+        await this.client.setTyping(roomId, true, 1000);
+        await sleep(1000);
+        console.log('[+] Sending Message');
+        let response = await fetch(`http://${config.botapiuri}/employees/oncall`, { methiod: 'GET', headers: { 'x-api-key': config.botapikey } });
+        response = await response.json();
+        let message = `The following employees are on call: \n\n`;
+        for (let i = 0; i < response.length; i++) {
+          message += `${response[i].Department} - ${response[i].Name} \n`;
+        }
+        this.client.sendNotice(roomId, message);
+      } else if (body.startsWith('!whereis')) {
+        console.log('[+] Sending Typing Notification');
+        await this.client.setTyping(roomId, true, 1000);
+        await sleep(1000);
+        console.log('[+] Sending Message');
+        let args = body.split(' ');
+        if (args.length < 2) {
+          this.client.sendNotice(roomId, 'Please provide a domain name to search for');
           return;
         }
-
-        const deviceArray = Object.values(devices);
-        const deviceId = deviceArray.find((device) => device.keys['curve25519:' + device.deviceId] === senderKey)?.deviceId;
-
-        if (!deviceId) {
-          console.warn('Cannot request room key: device not found');
-          return;
+        let domain = args[1];
+        domain = domain.replace('https://', '');
+        domain = domain.replace('http://', '');
+        domain = domain.replace('www.', '');
+        domain = domain.split('/')[0];
+        let response = await fetch(`http://${config.botapiuri}/domain/${domain}`, { methiod: 'GET', headers: { 'x-api-key': config.botapikey } });
+        response = await response.json();
+        let message = response.message;
+        this.client.sendNotice(roomId, message);
+      } else if (body.startsWith('!ext')) {
+        let args = body.split(' ');
+        if (args.length < 2) {
+          let response = await fetch(`http://${config.botapiuri}/ext`, { method: 'GET', headers: { 'x-api-key': config.botapikey } });
+          response = await response.json();
+          let message = `Intrada's Extension List \n\n`;
+          for (let i = 0; i < response.length; i++) {
+            message += `${response[i].Name}: ${response[i].Department} - ${response[i].Extension} \n`;
+          }
+          this.client.sendNotice(roomId, message);
+        } else {
+          let response = await fetch(`http://${config.botapiuri}/ext/${args[1].toString()}`, { method: 'GET', headers: { 'x-api-key': config.botapikey } });
+          response = await response.json();
+          let message = `Intrada's Extension List \n\n`;
+          for (let i = 0; i < response.length; i++) {
+            message += `${response[i].Name}: ${response[i].Department} - ${response[i].Extension} \n`;
+          }
+          this.client.sendNotice(roomId, message);
         }
-
-        const roomKeyRequestBody = {
-          algorithm: content.algorithm,
-          room_id: event.getRoomId(),
-          sender_key: senderKey,
-          session_id: sessionId,
-        };
-
-        const requestId = `${this.client.deviceId}:${senderKey}:${sessionId}`;
-
-        const keyRequestContent = {
-          action: 'request',
-          body: roomKeyRequestBody,
-          requesting_device_id: this.client.deviceId,
-          request_id: requestId,
-        };
-        const key_request_event = {
-          content: keyRequestContent,
-          type: 'm.room_key_request',
-          sender: sender,
-        };
-
-        console.log('Requesting room key...');
-        await this.client.sendToDevice('m.room_key_request', key_request_event);
-      } else {
-        this.handleMessage(room, event.getContent().body);
+      } else if (body.startsWith('!suggestion')) {
+        let suggestion = body.split('!suggestion ')[1];
+        let username = event['sender'].replaceAll('<', '').replaceAll('>', '');
+        console.log('[+] Sending Typing Notification');
+        await this.client.setTyping(roomId, true, 1000);
+        await sleep(1000);
+        if (suggestion) {
+          let response = await fetch(`http://${config.botapiuri}/suggestion`, {
+            method: 'POST',
+            headers: { 'x-api-key': config.botapikey, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ suggestion: suggestion, username: username }),
+          });
+          response = await response.json();
+          let message = response.message;
+          this.client.sendNotice(roomId, message);
+        } else {
+          let response = await fetch(`http://${config.botapiuri}/suggestion`, { method: 'get', headers: { 'x-api-key': config.botapikey } });
+          response = await response.json();
+          let message = `Current suggestions: \n\n`;
+          if(response.length > 0){
+            for (let i = 0; i < response.length; i++) {
+              message += `  ${response[i].firstname}: ${response[i].status}\n${response[i].suggestion} \n\n`;
+            }
+          }else{
+            message = 'No suggestions have been made yet'
+          }
+          this.client.sendNotice(roomId, message);
+        }
       }
     });
   }
 
-  // This is working fine
-  async joinRoom(roomId) {
-    try {
-      await this.client.joinRoom(roomId);
-      console.log(`Joined room: ${roomId}`);
-    } catch (error) {
-      console.error(`Failed to join room ${roomId}:`, error);
-    }
-  }
 
-  // This is working fine
   async login() {
-    const response = await this.client.loginWithPassword(config.username, config.password);
-    this.client.setAccessToken(response.access_token);
+    console.log('[+] Logging in with username and password');
+    this.client = await this.auth.passwordLogin(config.username, config.password);
+    this.accessToken = this.client.accessToken;
+
+    
+
   }
 
-
-  // this might not be working .. 
-  async enableEncryptionInAllJoinedRooms() {
-    const rooms = this.client.getRooms();
-    for (const room of rooms) {
-      const encryptionEvent = room.currentState.getStateEvents('m.room.encryption', '');
-      if (!encryptionEvent) continue;
-
-      const isEncrypted = encryptionEvent.getContent().algorithm === 'm.megolm.v1.aes-sha2';
-      if (!isEncrypted) continue;
-
-      const roomId = room.roomId;
-      await this.client.setRoomEncryption(roomId, {
-        algorithm: 'm.megolm.v1.aes-sha2',
-        rotation_period_ms: 604800000, // 1 week
-        rotation_period_msgs: 100,
-      });
-    }
-  }
-
-  // This is working fine
-  async handleMessage(room, message) {
-    // const response = `Hello! You said: ${message}`;
-    // await this.client.sendTextMessage(room.roomId, response);
-    console.log(message);
+  async initalizeClient() {
+    console.log('[+] Stabalizing Client');
+    this.client = new sdk.MatrixClient(config.homeserverUrl, this.accessToken, this.storage, this.cryptoProvider);
+    this.client.start();
   }
 }
 
