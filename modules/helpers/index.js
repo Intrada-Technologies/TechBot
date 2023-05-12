@@ -89,7 +89,7 @@ export const newTickets = async (client) => {
     } else {
       message = `${ticket.Person ? ticket.Person : ''} from ${ticket.Company ? ticket.Company : ''} put in a new ${ticket.Priority} ticket - #${ticket.TicketNumber}: ${ticket.Title}`;
     }
-    await client.sendNotice(config.connectwise.notifRoom, message);
+    await client.sendText(config.connectwise.notifRoom, message);
   }
 };
 
@@ -126,6 +126,6 @@ export const oldTickets = async (client) => {
         message = `Ticket ${ticket.TicketNumber} from  ${ticket.Person ? ticket.Person : ''} at ${ticket.Company ? ticket.Company : ''} is currently over due!!`;
       }
     }
-    await client.sendNotice(config.connectwise.notifRoom, message);
+    await client.sendText(config.connectwise.notifRoom, message);
   }
 };
