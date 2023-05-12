@@ -78,7 +78,7 @@ export const newTickets = async (client) => {
     return null;
   }
 
-  for await (const ticket of tickets.new) {
+  for await (const ticket of tickets) {
     let message = ``;
     if (ticket.Person && ticket.Company) {
       message = `${ticket.Person} from ${ticket.Company} put in a new ${ticket.Priority} ticket - #${ticket.TicketNumber}: ${ticket.Title}`;
@@ -102,7 +102,7 @@ export const oldTickets = async (client) => {
     return null;
   }
 
-  for await (const ticket of tickets.old) {
+  for await (const ticket of tickets) {
     let message = ``;
     let minutestill = 120 - ticket.LifeSpan * 60;
     if (ticket.LifeSpan < 1.99) {
