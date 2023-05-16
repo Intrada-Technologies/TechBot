@@ -1,5 +1,6 @@
 import config from '../../_config.json' assert { type: 'json' };
 import fetch from 'node-fetch';
+import { Resolver } from 'dns/promises';
 
 export const commandHandler = async (client, roomid, message, sender) => {
   let command = message.substring(1);
@@ -19,6 +20,9 @@ export const commandHandler = async (client, roomid, message, sender) => {
       break;
     case 'suggestion':
       await suggestion(client, roomid, message, sender);
+      break;
+    case 'dns':
+      await dns(client, roomid, message, sender);
       break;
     default:
       client.sendNotice(roomid, `Command ${command} not found, maybe make a suggestion?`);
@@ -164,4 +168,42 @@ const suggestion = async (client, roomid, message, sender) => {
     }
     client.sendNotice(roomid, msg);
   }
+};
+
+const dns = async (client, roomid, message) => {
+  await client.setTyping(roomid, true, 1000);
+  // message will come in like !dns <type>:<domain>
+  let body = message.split(' ');
+  let type = body[1].split(':')[0];
+  let domain = body[1].split(':')[1];
+  type = type.toUpperCase();
+
+  if (!type || !domain) {
+    await client.sendNotice(roomid, 'Please provide a valid command');
+    await client.setTyping(roomid, false);
+    return;
+  }
+
+  const resolver = new Resolver();
+  resolver.setServers(['8.8.8.8', '1.1.1.1']);
+  let msg = '';
+  try {
+    let response = await resolver.resolve(domain, type);
+    msg = `DNS Lookup for ${domain} \n\n`;
+    for (let i = 0; i < response.length; i++) {
+      if (typeof response[i] === 'string') {
+        msg += `${response[i]} \n`;
+      } else {
+        msg += `Priority ${response[i].priority}, ${response[i].exchange} \n`;
+      }
+
+    }
+  } catch (error) {
+    msg = `DNS Lookup for ${domain} \n\n`;
+    msg += 'No records found';
+  }
+  
+
+  await client.sendNotice(roomid, msg);
+  await client.setTyping(roomid, false);
 };
