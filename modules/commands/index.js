@@ -40,6 +40,7 @@ const help = async (client, roomid) => {
         !oncall - Displays the current on call list
         !oncall <add|remove/delete|set>:<department> <firstname|lastname|id> - Add to oncall list|Remove from oncall list|Set oncall per department by firstname lastname or id  ***
         !whereis <domain> - Displays the current location of the domain 
+        !dns <record type>:<domain> - Displays the current dns record for the given domain
         !ext - Displays the current extension list 
         !ext <name|ext num> - Displays the current extension list for the given name
         !suggestion <suggestion> - Sends a suggestion to the bot developer
@@ -172,7 +173,6 @@ const suggestion = async (client, roomid, message, sender) => {
 
 const dns = async (client, roomid, message) => {
   await client.setTyping(roomid, true, 1000);
-  // message will come in like !dns <type>:<domain>
   let body = message.split(' ');
   let type = body[1].split(':')[0];
   let domain = body[1].split(':')[1];
